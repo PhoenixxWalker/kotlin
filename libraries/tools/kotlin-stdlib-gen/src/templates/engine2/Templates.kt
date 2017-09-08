@@ -15,72 +15,89 @@ import java.io.StringReader
 @DslMarker
 annotation class TemplateDsl
 
-enum class MemberKind(val keyword: String) {
+enum class Keyword(val value: String) {
     Function("fun"),
     Value("val"),
-    Variable("var")
+    Variable("var");
 }
 
-typealias MemberSignatureDraft = (MemberBuilder) -> Unit
+typealias MemberBuildAction = MemberBuilder.() -> Unit
+typealias MemberBuildActionP<TParam> = MemberBuilder.(TParam) -> Unit
 
-private fun def(signature: String, memberKind: MemberKind): MemberSignatureDraft = { m ->
-    m.signature = signature
-    m.kind = memberKind
+private fun def(signature: String, memberKind: Keyword): MemberBuildAction = {
+    this.signature = signature
+    this.keyword = memberKind
 }
 
-fun fn(defaultSignature: String): MemberSignatureDraft = def(defaultSignature, MemberKind.Function)
+fun fn(defaultSignature: String): MemberBuildAction = def(defaultSignature, Keyword.Function)
 
 fun fn(defaultSignature: String, setup: FamilyPrimitiveMemberDsl.() -> Unit): MemberTemplate =
         FamilyPrimitiveMemberDsl().apply {
-            externalBuilderFunction = fn(defaultSignature)
+            builder(fn(defaultSignature))
             setup()
         }
 
-fun MemberSignatureDraft.byTwoPrimitives(setup: PairPrimitiveMemberDsl.() -> Unit): MemberTemplate =
+fun MemberBuildAction.byTwoPrimitives(setup: PairPrimitiveMemberDsl.() -> Unit): MemberTemplate =
         PairPrimitiveMemberDsl().apply {
-            externalBuilderFunction = this@byTwoPrimitives
+            builder(this@byTwoPrimitives)
             setup()
         }
 
 fun pval(name: String, setup: FamilyPrimitiveMemberDsl.() -> Unit): MemberTemplate =
         FamilyPrimitiveMemberDsl().apply {
-            externalBuilderFunction = def(name, MemberKind.Value)
+            builder(def(name, Keyword.Value))
             setup()
         }
 
 fun pvar(name: String, setup: FamilyPrimitiveMemberDsl.() -> Unit): MemberTemplate =
         FamilyPrimitiveMemberDsl().apply {
-            externalBuilderFunction = def(name, MemberKind.Variable)
+            builder(def(name, Keyword.Variable))
             setup()
         }
 
 
 interface MemberTemplate {
+    /** Specifies which platforms this member template should be generated for */
+    fun platforms(vararg platforms: Platform)
+
     fun instantiate(): Sequence<MemberBuilder>
+
+    /** Registers parameterless member builder function */
+    fun builder(b: MemberBuildAction)
+
 }
 
 abstract class GenericMemberDsl<TParam> : MemberTemplate {
-    var externalBuilderFunction: ((MemberBuilder) -> Unit)? = null
 
-    protected open fun specificBuilderDefaults(memberBuilder: MemberBuilder, p: TParam) {
+    sealed class BuildAction {
+        class Generic(val action: MemberBuildAction) : BuildAction() {
+            operator fun invoke(builder: MemberBuilder) { action(builder) }
+        }
+        class Parametrized(val action: MemberBuildActionP<*>) : BuildAction() {
+            @Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER", "UNCHECKED_CAST")
+            operator fun <TParam> invoke(builder: MemberBuilder, p: @kotlin.internal.NoInfer TParam) {
+                (action as MemberBuildActionP<TParam>).invoke(builder, p)
+            }
+        }
     }
 
+    val buildActions = mutableListOf<BuildAction>()
+
     private var targetPlatforms = setOf(*Platform.values())
-    fun platforms(vararg platforms: Platform) {
+    override fun platforms(vararg platforms: Platform) {
         targetPlatforms = setOf(*platforms)
     }
 
 
     private var filterPredicate: ((Family, TParam) -> Boolean)? = null
-    /** sets the filter predicate that is applied to produced sequence of variations */
+    /** Sets the filter predicate that is applied to a produced sequence of variations. */
     fun filter(predicate: (Family, TParam) -> Boolean) {
         this.filterPredicate = predicate
     }
 
-    private lateinit var builderFunction: MemberBuilder.(TParam) -> Unit
-    fun builder(b: MemberBuilder.(TParam) -> Unit) {
-        this.builderFunction = b
-    }
+    override fun builder(b: MemberBuildAction) { buildActions += BuildAction.Generic(b) }
+    /** Registers member builder function with the parameter(s) of this DSL */
+    fun builderWith(b: MemberBuildActionP<TParam>) { buildActions += BuildAction.Parametrized(b) }
 
 
 
@@ -118,9 +135,12 @@ abstract class GenericMemberDsl<TParam> : MemberTemplate {
 
     private fun createMemberBuilder(platform: Platform, family: Family, p: TParam): MemberBuilder {
         return MemberBuilder(targetPlatforms, platform, family).also { builder ->
-            externalBuilderFunction?.invoke(builder)
-            specificBuilderDefaults(builder, p)
-            builderFunction(builder, p)
+            for (action in buildActions) {
+                when (action) {
+                    is BuildAction.Generic -> action(builder)
+                    is BuildAction.Parametrized -> action<TParam>(builder, p)
+                }
+            }
         }
     }
 
@@ -166,8 +186,8 @@ class FamilyPrimitiveMemberDsl : GenericMemberDsl<PrimitiveType?>() {
         }
     }
 
-    override fun specificBuilderDefaults(memberBuilder: MemberBuilder, p: PrimitiveType?) {
-        memberBuilder.primitive = p
+    init {
+        builderWith { p -> primitive = p }
     }
 }
 
@@ -186,8 +206,8 @@ class PairPrimitiveMemberDsl : GenericMemberDsl<Pair<PrimitiveType, PrimitiveTyp
                 .asSequence()
     }
 
-    override fun specificBuilderDefaults(memberBuilder: MemberBuilder, p: Pair<PrimitiveType, PrimitiveType>) {
-        memberBuilder.primitive = p.first
+    init {
+        builderWith { (p1, p2) -> primitive = p1 }
     }
 }
 
@@ -202,7 +222,7 @@ class MemberBuilder(
         var sourceFile: SourceFile = getDefaultSourceFile(family),
         var primitive: PrimitiveType? = null
 ) {
-    lateinit var kind: MemberKind    // fun/val/var
+    lateinit var keyword: Keyword    // fun/val/var
     lateinit var signature: String   // name and params
 
     val f get() = family
@@ -245,7 +265,7 @@ class MemberBuilder(
         inline = value
         if (suppressWarning) {
             require(value == Inline.Yes)
-            annotations += """@Suppress("NOTHING_TO_INLINE")"""
+            annotation("""@Suppress("NOTHING_TO_INLINE")""")
         }
     }
     fun inlineOnly() { inline = Inline.Only }
@@ -256,6 +276,10 @@ class MemberBuilder(
 
     fun typeParam(typeParameterName: String) {
         typeParams += typeParameterName
+    }
+
+    fun annotation(annotation: String) {
+        annotations += annotation
     }
 
     fun sequenceClassification(vararg sequenceClass: SequenceClass) {
@@ -287,6 +311,8 @@ class MemberBuilder(
 
 
     fun build(builder: Appendable) {
+        // TODO: legacy mode when all is headerOnly + no_impl
+        // except functions with optional parameters - they are common + no_impl
         val headerOnly: Boolean = platform == Platform.Common && hasPlatformSpecializations
         val isImpl: Boolean = platform != Platform.Common && Platform.Common in allowedPlatforms
 
@@ -448,25 +474,16 @@ class MemberBuilder(
             builder.append("@kotlin.internal.InlineOnly").append('\n')
         }
 
-        builder.append(visibility ?: "public").append(' ')
-        if (headerOnly) {
-            builder.append("header ")
-        }
-        if (isImpl) {
-            builder.append("impl ")
-        }
-        if (external)
-            builder.append("external ")
-        if (inline.isInline())
-            builder.append("inline ")
-
-        if (infix)
-            builder.append("infix ")
-        if (operator)
-            builder.append("operator ")
-
-
-        builder.append("${kind.keyword} ")
+        listOfNotNull(
+                visibility ?: "public",
+                "header".takeIf { headerOnly },
+                "impl".takeIf { isImpl },
+                "external".takeIf { external },
+                "inline".takeIf { inline.isInline() },
+                "infix".takeIf { infix },
+                "operator".takeIf { operator },
+                keyword.value
+        ).forEach { builder.append(it).append(' ') }
 
         val types = effectiveTypeParams()
         if (!types.isEmpty()) {
@@ -484,7 +501,7 @@ class MemberBuilder(
             return
         }
 
-        if (kind == MemberKind.Function) builder.append(" {")
+        if (keyword == Keyword.Function) builder.append(" {")
 
         val body = (body ?:
                 deprecate?.replaceWith?.let { "return $it" } ?:
@@ -501,7 +518,8 @@ class MemberBuilder(
                 builder.append("\n")
             }
         }
-        if (kind == MemberKind.Function) builder.append("}\n")
+
+        if (keyword == Keyword.Function) builder.append("}\n")
         builder.append("\n")
     }
 
@@ -524,7 +542,7 @@ val integralPermutations = primitivePermutations.filter { it.first.isIntegral() 
 val f_downTo = fn("downTo(to: Primitive)").byTwoPrimitives {
     include(Primitives, integralPermutations)
 
-    builder { (fromType, toType) ->
+    builderWith { (fromType, toType) ->
         sourceFile(SourceFile.Ranges)
 
         val elementType = rangeElementType(fromType, toType)
@@ -573,7 +591,7 @@ val f_sort_range = fn("sort(fromIndex: Int = 0, toIndex: Int = size)") {
 val f_copyOf = fn("copyOf()") {
     include(InvariantArraysOfObjects)
     include(ArraysOfPrimitives, PrimitiveType.defaultPrimitives)
-    builder { primitive ->
+    builderWith { primitive ->
 
         doc { "Returns new array which is a copy of the original array." }
         returns("SELF")
@@ -601,7 +619,7 @@ val f_copyOf = fn("copyOf()") {
 val f_plusElementOperator = fn("plus(element: T)") {
     include(InvariantArraysOfObjects, ArraysOfPrimitives)
 
-    builder { primitive ->
+    builderWith { primitive ->
         doc { "Returns an array containing all elements of the original array and then the given [element]." }
         operator()
         returns("SELF")
@@ -780,6 +798,9 @@ class MemberInstance(
 
 fun main(args: Array<String>) {
     val fns = sequenceOf(f_copyOf, f_sort_range, f_downTo, f_plusElementOperator)
+            .onEach {
+                it.builder { sequenceClassification(SequenceClass.intermediate) }
+            }
 
 
     fns.groupByFileAndWrite { (platform, source) ->
