@@ -360,7 +360,7 @@ class ScriptTemplateTest {
             includeKotlinRuntime: Boolean = true
     ): Class<*>? =
             compileScriptImpl("compiler/testData/script/" + scriptPath, KotlinScriptDefinitionFromAnnotatedTemplate(
-                    scriptTemplate, null, null, environment
+                    scriptTemplate, environment
             ), runIsolated, messageCollector, includeKotlinRuntime)
 
     private fun compileScriptImpl(

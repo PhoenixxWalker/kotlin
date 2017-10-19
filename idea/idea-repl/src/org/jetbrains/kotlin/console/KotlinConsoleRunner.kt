@@ -31,6 +31,7 @@ import com.intellij.openapi.actionSystem.CommonShortcuts
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.markup.HighlighterLayer
@@ -46,6 +47,7 @@ import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiManager
 import com.intellij.psi.impl.PsiFileFactoryImpl
 import com.intellij.testFramework.LightVirtualFile
+import com.intellij.util.containers.ContainerUtil
 import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.console.actions.BuildAndRestartConsoleAction
 import org.jetbrains.kotlin.console.actions.KtExecuteCommandAction
@@ -54,7 +56,11 @@ import org.jetbrains.kotlin.console.gutter.ConsoleIndicatorRenderer
 import org.jetbrains.kotlin.console.gutter.IconWithTooltip
 import org.jetbrains.kotlin.console.gutter.ReplIcons
 import org.jetbrains.kotlin.idea.KotlinLanguage
-import org.jetbrains.kotlin.idea.caches.resolve.*
+import org.jetbrains.kotlin.idea.caches.resolve.NotUnderContentRootModuleInfo
+import org.jetbrains.kotlin.idea.caches.resolve.productionSourceInfo
+import org.jetbrains.kotlin.idea.caches.resolve.testSourceInfo
+import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
+import org.jetbrains.kotlin.idea.core.script.ScriptDefinitionContributor
 import org.jetbrains.kotlin.idea.project.KOTLIN_CONSOLE_KEY
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.name.Name
@@ -66,7 +72,6 @@ import org.jetbrains.kotlin.resolve.lazy.ForceResolveUtil
 import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyScriptDescriptor
 import org.jetbrains.kotlin.resolve.repl.ReplState
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
-import org.jetbrains.kotlin.script.KotlinScriptDefinitionProvider
 import java.awt.Color
 import java.awt.Font
 import java.util.concurrent.CountDownLatch
@@ -89,7 +94,7 @@ class KotlinConsoleRunner(
 
     override fun finishConsole() {
         KotlinConsoleKeeper.getInstance(project).removeConsole(consoleView.virtualFile)
-        KotlinScriptDefinitionProvider.getInstance(project)!!.removeScriptDefinition(consoleScriptDefinition)
+        project.service<ConsoleScriptDefinitionContributor>().unregisterDefinition(consoleScriptDefinition)
 
         if (ApplicationManager.getApplication().isUnitTestMode) {
             consoleTerminated.countDown()
@@ -151,7 +156,7 @@ class KotlinConsoleRunner(
         val executeAction = KtExecuteCommandAction(consoleView.virtualFile)
         executeAction.registerCustomShortcutSet(CommonShortcuts.CTRL_ENTER, consoleView.consoleEditor.component)
 
-        KotlinScriptDefinitionProvider.getInstance(project)!!.addScriptDefinition(consoleScriptDefinition)
+        project.service<ConsoleScriptDefinitionContributor>().registerDefinitions(consoleScriptDefinition)
         enableCompletion(consoleView)
 
         return consoleView
@@ -284,5 +289,23 @@ class KotlinConsoleRunner(
 
     private fun configureFileDependencies(psiFile: KtFile) {
         psiFile.moduleInfo = module.testSourceInfo() ?: module.productionSourceInfo() ?: NotUnderContentRootModuleInfo
+    }
+}
+
+class ConsoleScriptDefinitionContributor: ScriptDefinitionContributor {
+    private val definitions = ContainerUtil.newConcurrentSet<KotlinScriptDefinition>()
+
+    override val id: String = "IDEA Console"
+
+    override fun getDefinitions(): List<KotlinScriptDefinition> {
+        return definitions.toList()
+    }
+
+    fun registerDefinitions(definition: KotlinScriptDefinition) {
+        definitions.add(definition)
+    }
+
+    fun unregisterDefinition(definition: KotlinScriptDefinition) {
+        definitions.remove(definition)
     }
 }
