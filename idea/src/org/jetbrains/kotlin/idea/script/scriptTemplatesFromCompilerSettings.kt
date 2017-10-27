@@ -16,14 +16,31 @@
 
 package org.jetbrains.kotlin.idea.script
 
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import org.jetbrains.kotlin.config.CompilerSettings
 import org.jetbrains.kotlin.idea.compiler.configuration.KotlinCompilerSettings
+import org.jetbrains.kotlin.idea.compiler.configuration.KotlinCompilerSettingsListener
 import org.jetbrains.kotlin.idea.core.script.ScriptDefinitionContributor
+import org.jetbrains.kotlin.idea.core.script.ScriptDefinitionsManager
 import org.jetbrains.kotlin.idea.core.script.loadDefinitionsFromTemplates
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import java.io.File
 
 class ScriptTemplatesFromCompilerSettingsProvider(private val project: Project) : ScriptDefinitionContributor {
+    init {
+        project.messageBus.connect().subscribe(KotlinCompilerSettingsListener.TOPIC, object: KotlinCompilerSettingsListener {
+            override fun <T> settingsChanged(oldSettings: T, newSettings: T) {
+                if (oldSettings !is CompilerSettings || newSettings !is CompilerSettings) return
+
+                if (oldSettings.scriptTemplatesClasspath != newSettings.scriptTemplatesClasspath ||
+                    oldSettings.scriptTemplates != newSettings.scriptTemplates) {
+                    project.service<ScriptDefinitionsManager>().reloadDefinitionsBy(this@ScriptTemplatesFromCompilerSettingsProvider)
+                }
+            }
+        })
+    }
+
     override fun getDefinitions(): List<KotlinScriptDefinition> {
         val kotlinSettings = KotlinCompilerSettings.getInstance(project).settings
         return loadDefinitionsFromTemplates(

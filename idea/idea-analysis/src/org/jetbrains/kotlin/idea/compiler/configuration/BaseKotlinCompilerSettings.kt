@@ -18,6 +18,8 @@ package org.jetbrains.kotlin.idea.compiler.configuration
 
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.StoragePathMacros.PROJECT_CONFIG_DIR
+import com.intellij.openapi.project.Project
+import com.intellij.util.messages.Topic
 import com.intellij.util.xmlb.SkipDefaultValuesSerializationFilters
 import com.intellij.util.xmlb.XmlSerializer
 import org.jdom.Element
@@ -25,7 +27,7 @@ import org.jetbrains.kotlin.cli.common.arguments.*
 import org.jetbrains.kotlin.config.SettingConstants
 import kotlin.reflect.KClass
 
-abstract class BaseKotlinCompilerSettings<T : Freezable> protected constructor() : PersistentStateComponent<Element>, Cloneable {
+abstract class BaseKotlinCompilerSettings<T : Freezable> protected constructor(private val project: Project) : PersistentStateComponent<Element>, Cloneable {
     @Suppress("LeakingThis", "UNCHECKED_CAST")
     private var _settings: T = createSettings().frozen() as T
         private set(value) {
@@ -36,7 +38,7 @@ abstract class BaseKotlinCompilerSettings<T : Freezable> protected constructor()
         get() = _settings
         set(value) {
             validateNewSettings(value)
-            @Suppress("UNCHECKED_CAST")
+            project.messageBus.syncPublisher(KotlinCompilerSettingsListener.TOPIC).settingsChanged(_settings, value)
             _settings = value
         }
 
@@ -80,5 +82,13 @@ abstract class BaseKotlinCompilerSettings<T : Freezable> protected constructor()
                     sourceMapEmbedSources = K2JsArgumentConstants.SOURCE_MAP_SOURCE_CONTENT_INLINING
                 }
         )
+    }
+}
+
+interface KotlinCompilerSettingsListener {
+    fun <T> settingsChanged(oldSettings: T, newSettings: T)
+
+    companion object {
+        val TOPIC = Topic.create("KotlinCompilerSettingsListener", KotlinCompilerSettingsListener::class.java)
     }
 }
