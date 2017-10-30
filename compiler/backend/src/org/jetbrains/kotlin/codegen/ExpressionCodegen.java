@@ -2659,7 +2659,7 @@ public class ExpressionCodegen extends KtVisitor<StackValue, StackValue> impleme
                 result = cur.getOuterExpression(result, false);
             }
 
-            cur = cur.getParentContext();
+            cur = cur.getEnclosingClassContext();
         }
 
         throw new UnsupportedOperationException();
