@@ -2164,20 +2164,9 @@ public class ExpressionCodegen extends KtVisitor<StackValue, StackValue> impleme
 
     @NotNull
     public StackValue invokeFunction(@NotNull Call call, @NotNull ResolvedCall<?> resolvedCall, @NotNull StackValue receiver) {
-        ResolvedCallWithRealDescriptor callWithRealDescriptor =
-                CoroutineCodegenUtilKt.replaceSuspensionFunctionWithRealDescriptor(
-                        resolvedCall, state.getProject(), state.getBindingContext()
-                );
-        if (callWithRealDescriptor != null) {
-            StackValue coroutineInstanceValueForSuspensionPoint = getCoroutineInstanceValueForSuspensionPoint(resolvedCall);
-            StackValue coroutineInstanceValue =
-                    coroutineInstanceValueForSuspensionPoint != null
-                    ? coroutineInstanceValueForSuspensionPoint
-                    : getContinuationParameterFromEnclosingSuspendFunction(resolvedCall);
-            tempVariables.put(callWithRealDescriptor.getFakeContinuationExpression(), coroutineInstanceValue);
+        ResolvedCall<?> suspendResolvedCall = resolvedCallForSuspendingFunction(resolvedCall);
+        if (suspendResolvedCall != null) return invokeFunction(suspendResolvedCall, receiver);
 
-            return invokeFunction(callWithRealDescriptor.getResolvedCall(), receiver);
-        }
         FunctionDescriptor fd = accessibleFunctionDescriptor(resolvedCall);
         ClassDescriptor superCallTarget = getSuperCallTarget(call);
 
@@ -3403,6 +3392,10 @@ public class ExpressionCodegen extends KtVisitor<StackValue, StackValue> impleme
     private StackValue generateAugmentedAssignment(KtBinaryExpression expression) {
         return StackValue.operation(Type.VOID_TYPE, adapter -> {
             ResolvedCall<?> resolvedCall = CallUtilKt.getResolvedCallWithAssert(expression, bindingContext);
+
+            ResolvedCall<?> suspendResolvedCall = resolvedCallForSuspendingFunction(resolvedCall);
+            if (suspendResolvedCall != null) resolvedCall = suspendResolvedCall;
+
             FunctionDescriptor descriptor = accessibleFunctionDescriptor(resolvedCall);
             Callable callable = resolveToCallable(descriptor, false, resolvedCall);
             KtExpression lhs = expression.getLeft();
@@ -3415,6 +3408,24 @@ public class ExpressionCodegen extends KtVisitor<StackValue, StackValue> impleme
 
             return Unit.INSTANCE;
         });
+    }
+
+    @Nullable
+    private ResolvedCall<?> resolvedCallForSuspendingFunction(@NotNull ResolvedCall<?> resolvedCall) {
+        ResolvedCallWithRealDescriptor callWithRealDescriptor =
+                CoroutineCodegenUtilKt.replaceSuspensionFunctionWithRealDescriptor(
+                        resolvedCall, state.getProject(), state.getBindingContext()
+                );
+        if (callWithRealDescriptor != null) {
+            StackValue coroutineInstanceValueForSuspensionPoint = getCoroutineInstanceValueForSuspensionPoint(resolvedCall);
+            StackValue coroutineInstanceValue =
+                    coroutineInstanceValueForSuspensionPoint != null
+                    ? coroutineInstanceValueForSuspensionPoint
+                    : getContinuationParameterFromEnclosingSuspendFunction(resolvedCall);
+            tempVariables.put(callWithRealDescriptor.getFakeContinuationExpression(), coroutineInstanceValue);
+            return callWithRealDescriptor.getResolvedCall();
+        }
+        return null;
     }
 
     private void putCallAugAssignMethod(
