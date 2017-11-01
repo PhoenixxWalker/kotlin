@@ -22,11 +22,9 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 
 interface ScriptDefinitionProvider {
-    fun findScriptDefinition(fileName: String): KotlinScriptDefinition? = definitions.firstOrNull { it.isScript(fileName) }
-    fun isScript(fileName: String): Boolean = definitions.any { it.isScript(fileName) }
+    fun findScriptDefinition(fileName: String): KotlinScriptDefinition?
+    fun isScript(fileName: String): Boolean
     fun findScriptDefinition(file: VirtualFile): KotlinScriptDefinition? = findScriptDefinition(file.name)
-
-    val definitions: List<KotlinScriptDefinition>
 
     companion object {
         fun getInstance(project: Project): ScriptDefinitionProvider =

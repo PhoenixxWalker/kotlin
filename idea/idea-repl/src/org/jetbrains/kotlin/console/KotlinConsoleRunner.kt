@@ -31,7 +31,6 @@ import com.intellij.openapi.actionSystem.CommonShortcuts
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
-import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.markup.HighlighterLayer
@@ -61,6 +60,7 @@ import org.jetbrains.kotlin.idea.caches.resolve.productionSourceInfo
 import org.jetbrains.kotlin.idea.caches.resolve.testSourceInfo
 import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
 import org.jetbrains.kotlin.idea.core.script.ScriptDefinitionContributor
+import org.jetbrains.kotlin.idea.core.script.ScriptDefinitionsManager
 import org.jetbrains.kotlin.idea.project.KOTLIN_CONSOLE_KEY
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.name.Name
@@ -94,7 +94,9 @@ class KotlinConsoleRunner(
 
     override fun finishConsole() {
         KotlinConsoleKeeper.getInstance(project).removeConsole(consoleView.virtualFile)
-        project.service<ConsoleScriptDefinitionContributor>().unregisterDefinition(consoleScriptDefinition)
+        val consoleContributor = ScriptDefinitionContributor.find<ConsoleScriptDefinitionContributor>(project)!!
+        consoleContributor.unregisterDefinition(consoleScriptDefinition)
+        ScriptDefinitionsManager.getInstance(project).reloadDefinitionsBy(consoleContributor)
 
         if (ApplicationManager.getApplication().isUnitTestMode) {
             consoleTerminated.countDown()
@@ -156,7 +158,10 @@ class KotlinConsoleRunner(
         val executeAction = KtExecuteCommandAction(consoleView.virtualFile)
         executeAction.registerCustomShortcutSet(CommonShortcuts.CTRL_ENTER, consoleView.consoleEditor.component)
 
-        project.service<ConsoleScriptDefinitionContributor>().registerDefinitions(consoleScriptDefinition)
+        val consoleContributor = ScriptDefinitionContributor.find<ConsoleScriptDefinitionContributor>(project)!!
+        consoleContributor.registerDefinition(consoleScriptDefinition)
+        ScriptDefinitionsManager.getInstance(project).reloadDefinitionsBy(consoleContributor)
+
         enableCompletion(consoleView)
 
         return consoleView
@@ -301,7 +306,7 @@ class ConsoleScriptDefinitionContributor: ScriptDefinitionContributor {
         return definitions.toList()
     }
 
-    fun registerDefinitions(definition: KotlinScriptDefinition) {
+    fun registerDefinition(definition: KotlinScriptDefinition) {
         definitions.add(definition)
     }
 

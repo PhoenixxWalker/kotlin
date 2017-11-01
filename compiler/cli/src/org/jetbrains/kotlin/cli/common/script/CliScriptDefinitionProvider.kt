@@ -24,20 +24,21 @@ import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 class CliScriptDefinitionProvider : ScriptDefinitionProvider {
-    private val _definitions: MutableList<KotlinScriptDefinition> = arrayListOf(StandardScriptDefinition)
-    private val definitionsLock = ReentrantReadWriteLock()
+    private val definitions: MutableList<KotlinScriptDefinition> = arrayListOf(StandardScriptDefinition)
+    private val lock = ReentrantReadWriteLock()
 
-    override val definitions: List<KotlinScriptDefinition> = definitionsLock.read { _definitions }
+    override fun findScriptDefinition(fileName: String) = lock.read {
+        definitions.firstOrNull { it.isScript(fileName) }
+    }
+
+    override fun isScript(fileName: String) = lock.read {
+        definitions.any { it.isScript(fileName) }
+    }
 
     fun setScriptDefinitions(newDefinitions: List<KotlinScriptDefinition>) {
-        definitionsLock.write {
-            _definitions.clear()
-            _definitions.addAll(newDefinitions)
-
-            // TODO: ?
-            if (_definitions.isEmpty()) {
-                _definitions.add(StandardScriptDefinition)
-            }
+        lock.write {
+            definitions.clear()
+            definitions.addAll(newDefinitions)
         }
     }
 }

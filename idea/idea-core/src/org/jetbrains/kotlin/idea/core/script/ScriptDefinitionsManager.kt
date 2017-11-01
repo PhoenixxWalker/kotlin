@@ -41,12 +41,7 @@ import kotlin.script.experimental.dependencies.ScriptDependencies
 import kotlin.script.experimental.dependencies.asSuccess
 import kotlin.script.templates.standard.ScriptTemplateWithArgs
 
-class IdeScriptDefinitionProvider(private val scriptDefinitionsManager: ScriptDefinitionsManager): ScriptDefinitionProvider {
-    override val definitions: List<KotlinScriptDefinition>
-        get() = scriptDefinitionsManager.getDefinitions()
-}
-
-class ScriptDefinitionsManager(private val project: Project) {
+class ScriptDefinitionsManager(private val project: Project): ScriptDefinitionProvider {
     private val lock = ReentrantReadWriteLock()
     private var definitionsByContributor = mutableMapOf<ScriptDefinitionContributor, List<KotlinScriptDefinition>>()
     private var definitions: List<KotlinScriptDefinition> = emptyList()
@@ -57,13 +52,23 @@ class ScriptDefinitionsManager(private val project: Project) {
         updateDefinitions()
     }
 
-    fun getDefinitions(): List<KotlinScriptDefinition> = lock.read {
-        if (definitions.isNotEmpty()) return definitions
-
-        else {
-            reloadScriptDefinitions()
-            return definitions
+    private fun currentDefinitions(): List<KotlinScriptDefinition> {
+        val hasDefinitions = definitions.isNotEmpty()
+        when {
+            hasDefinitions -> return definitions
+            else -> {
+                reloadScriptDefinitions()
+                return definitions
+            }
         }
+    }
+
+    override fun findScriptDefinition(fileName: String): KotlinScriptDefinition? = lock.read {
+        currentDefinitions().firstOrNull { it.isScript(fileName) }
+    }
+
+    override fun isScript(fileName: String) = lock.read {
+        currentDefinitions().any { it.isScript(fileName) }
     }
 
     private fun getContributors(): List<ScriptDefinitionContributor> =
@@ -80,19 +85,26 @@ class ScriptDefinitionsManager(private val project: Project) {
         project.service<ScriptDependenciesUpdater>().clear()
     }
 
-    private fun ScriptDefinitionContributor.safeGetDefinitions(): List<KotlinScriptDefinition> = try {
-        getDefinitions()
+    private fun ScriptDefinitionContributor.safeGetDefinitions(): List<KotlinScriptDefinition> {
+        return try {
+            getDefinitions()
+        }
+        catch (t: Throwable) {
+            // TODO: review exception handling
+            // possibly log, see KT-19276
+            emptyList()
+        }
     }
-    catch (t: Throwable) {
-        // possibly log, see KT-19276
-        emptyList()
+
+    companion object {
+        fun getInstance(project: Project): ScriptDefinitionsManager = project.service<ScriptDefinitionProvider>() as ScriptDefinitionsManager
     }
 }
 
 
 private val LOG = Logger.getInstance("ScriptTemplatesProviders")
 
-fun ScriptDefinitionContributor.loadDefinitionsFromTemplates(
+fun loadDefinitionsFromTemplates(
         templateClassNames: List<String>,
         templateClasspath: List<File>,
         environment: Environment = emptyMap(),
@@ -118,11 +130,11 @@ fun ScriptDefinitionContributor.loadDefinitionsFromTemplates(
     }
 }
 catch (ex: Throwable) {
+    // TODO: review exception handling
     emptyList()
 }
 
 interface ScriptDefinitionContributor {
-    // for resolving ambiguities
     val id: String
 
     fun getDefinitions(): List<KotlinScriptDefinition>
@@ -130,6 +142,9 @@ interface ScriptDefinitionContributor {
     companion object {
         val EP_NAME: ExtensionPointName<ScriptDefinitionContributor> =
                 ExtensionPointName.create<ScriptDefinitionContributor>("org.jetbrains.kotlin.scriptDefinitionContributor")
+
+        inline fun <reified T> find(project: Project) =
+                Extensions.getArea(project).getExtensionPoint(ScriptDefinitionContributor.EP_NAME).extensions.filterIsInstance<T>().firstOrNull()
     }
 
 }

@@ -16,7 +16,6 @@
 
 package org.jetbrains.kotlin.idea.script
 
-import com.intellij.openapi.components.service
 import com.intellij.openapi.extensions.Extensions
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.text.StringUtil
@@ -181,6 +180,6 @@ abstract class AbstractScriptConfigurationTest : KotlinDaemonAnalyzerTestCase() 
                 provider,
                 testRootDisposable
         )
-        project.service<ScriptDefinitionsManager>().reloadScriptDefinitions()
+        ScriptDefinitionsManager.getInstance(project).reloadScriptDefinitions()
     }
 }
