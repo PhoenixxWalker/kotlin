@@ -30,13 +30,10 @@ import java.io.File
 class ScriptTemplatesFromCompilerSettingsProvider(private val project: Project) : ScriptDefinitionContributor {
     init {
         project.messageBus.connect().subscribe(KotlinCompilerSettingsListener.TOPIC, object: KotlinCompilerSettingsListener {
-            override fun <T> settingsChanged(oldSettings: T, newSettings: T) {
-                if (oldSettings !is CompilerSettings || newSettings !is CompilerSettings) return
+            override fun <T> settingsChanged(newSettings: T) {
+                if (newSettings !is CompilerSettings) return
 
-                if (oldSettings.scriptTemplatesClasspath != newSettings.scriptTemplatesClasspath ||
-                    oldSettings.scriptTemplates != newSettings.scriptTemplates) {
-                    project.service<ScriptDefinitionsManager>().reloadDefinitionsBy(this@ScriptTemplatesFromCompilerSettingsProvider)
-                }
+                project.service<ScriptDefinitionsManager>().reloadDefinitionsBy(this@ScriptTemplatesFromCompilerSettingsProvider)
             }
         })
     }

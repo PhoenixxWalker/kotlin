@@ -36,15 +36,15 @@ abstract class BaseKotlinCompilerSettings<T : Freezable> protected constructor(p
 
     var settings: T
         get() = _settings
-        set(value) {
+        private set(value) {
             validateNewSettings(value)
-            project.messageBus.syncPublisher(KotlinCompilerSettingsListener.TOPIC).settingsChanged(_settings, value)
             _settings = value
         }
 
     fun update(changer: T.() -> Unit) {
         @Suppress("UNCHECKED_CAST")
         settings = (settings.unfrozen() as T).apply { changer() }
+        project.messageBus.syncPublisher(KotlinCompilerSettingsListener.TOPIC).settingsChanged(settings)
     }
 
     protected fun validateInheritedFieldsUnchanged(settings: T) {
@@ -67,6 +67,7 @@ abstract class BaseKotlinCompilerSettings<T : Freezable> protected constructor(p
 
     override fun loadState(state: Element) {
         _settings = XmlSerializer.deserialize(state, _settings.javaClass)
+        project.messageBus.syncPublisher(KotlinCompilerSettingsListener.TOPIC).settingsChanged(settings)
     }
 
     public override fun clone(): Any = super.clone()
@@ -86,7 +87,7 @@ abstract class BaseKotlinCompilerSettings<T : Freezable> protected constructor(p
 }
 
 interface KotlinCompilerSettingsListener {
-    fun <T> settingsChanged(oldSettings: T, newSettings: T)
+    fun <T> settingsChanged(newSettings: T)
 
     companion object {
         val TOPIC = Topic.create("KotlinCompilerSettingsListener", KotlinCompilerSettingsListener::class.java)
