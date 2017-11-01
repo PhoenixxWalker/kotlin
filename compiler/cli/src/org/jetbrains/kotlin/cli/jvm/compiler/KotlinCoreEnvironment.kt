@@ -106,6 +106,7 @@ import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory
 import org.jetbrains.kotlin.script.ScriptDefinitionProvider
 import org.jetbrains.kotlin.script.ScriptDependenciesProvider
 import org.jetbrains.kotlin.script.ScriptReportSink
+import org.jetbrains.kotlin.script.StandardScriptDefinition
 import org.jetbrains.kotlin.utils.PathUtil
 import java.io.File
 import java.util.zip.ZipFile
@@ -416,9 +417,13 @@ class KotlinCoreEnvironment private constructor(
         @JvmStatic fun createForTests(
                 parentDisposable: Disposable, configuration: CompilerConfiguration, extensionConfigs: EnvironmentConfigFiles
         ): KotlinCoreEnvironment {
+            val config = configuration.copy()
+            if (config.getList(JVMConfigurationKeys.SCRIPT_DEFINITIONS).isEmpty()) {
+                config.add(JVMConfigurationKeys.SCRIPT_DEFINITIONS, StandardScriptDefinition)
+            }
             // Tests are supposed to create a single project and dispose it right after use
             return KotlinCoreEnvironment(parentDisposable,
-                                         createApplicationEnvironment(parentDisposable, configuration, extensionConfigs.files),
+                                         createApplicationEnvironment(parentDisposable, config, extensionConfigs.files),
                                          configuration,
                                          extensionConfigs)
         }

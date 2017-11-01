@@ -34,6 +34,7 @@ class CliScriptDefinitionProvider : ScriptDefinitionProvider {
             _definitions.clear()
             _definitions.addAll(newDefinitions)
 
+            // TODO: ?
             if (_definitions.isEmpty()) {
                 _definitions.add(StandardScriptDefinition)
             }
