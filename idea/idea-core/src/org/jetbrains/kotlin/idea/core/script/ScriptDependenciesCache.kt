@@ -37,11 +37,11 @@ import kotlin.reflect.KProperty0
 import kotlin.reflect.jvm.isAccessible
 import kotlin.script.experimental.dependencies.ScriptDependencies
 
-private const val MAX_SCRIPTS_CACHED = 15
+private const val MAX_SCRIPTS_CACHED = 10
 
 class ScriptDependenciesCache(private val project: Project) {
     private val cacheLock = ReentrantReadWriteLock()
-    private val cache = SLRUMap<VirtualFile, ScriptDependencies>(0, MAX_SCRIPTS_CACHED)
+    private val cache = SLRUMap<VirtualFile, ScriptDependencies>(MAX_SCRIPTS_CACHED, MAX_SCRIPTS_CACHED)
 
     operator fun get(virtualFile: VirtualFile): ScriptDependencies? = cacheLock.read { cache[virtualFile] }
 
