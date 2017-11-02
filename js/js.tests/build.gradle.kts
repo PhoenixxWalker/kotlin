@@ -1,6 +1,8 @@
 
 apply { plugin("kotlin") }
 
+configureIntellijPlugin()
+
 dependencies {
     testCompile(protobufFull())
     testCompile(projectTests(":compiler:tests-common"))
@@ -10,7 +12,6 @@ dependencies {
     testCompile(project(":js:js.translator"))
     testCompile(project(":js:js.serializer"))
     testCompile(project(":js:js.dce"))
-    testCompile(ideaSdkDeps("openapi", "idea", "idea_rt"))
     testCompile(commonDep("junit:junit"))
     testRuntime(projectDist(":kotlin-compiler"))
     testRuntime(projectDist(":kotlin-stdlib"))
@@ -22,6 +23,13 @@ dependencies {
     testRuntime(commonDep("org.fusesource.jansi", "jansi"))
     testCompile(projectTests(":kotlin-build-common"))
 }
+
+afterEvaluate {
+    dependencies {
+        testCompile(intellij { include("openapi.jar", "idea.jar", "idea_rt.jar") })
+    }
+}
+
 
 sourceSets {
     "main" {}

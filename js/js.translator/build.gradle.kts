@@ -3,6 +3,10 @@ apply { plugin("kotlin") }
 
 jvmTarget = "1.6"
 
+configureIntellijPlugin {
+    setExtraDependencies("intellij-core")
+}
+
 dependencies {
     compile(project(":core"))
     compile(project(":compiler:util"))
@@ -11,7 +15,12 @@ dependencies {
     compile(project(":js:js.ast"))
     compile(project(":js:js.frontend"))
     compile(project(":js:js.parser"))
-    compile(ideaSdkCoreDeps("intellij-core"))
+}
+
+afterEvaluate {
+    dependencies {
+        compile(intellijCoreJar())
+    }
 }
 
 sourceSets {
