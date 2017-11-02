@@ -64,4 +64,8 @@ fun Project.intellijExtra(extraName: String, filter: (PatternFilterable.() -> Un
 // frequent combinations
 
 fun Project.intellijCoreJar() = intellijExtra("intellij-core") { include("intellij-core.jar") }
-fun Project.intellijCoreJarDependencies() = intellij { include(rootProject.extra["ideaSdkIntellijCoreDependencies"] as List<String>) }
+fun Project.intellijCoreJarDependencies(filter: (PatternFilterable.() -> Unit) = {}) =
+        intellij {
+            include(rootProject.extra["ideaSdkIntellijCoreDependencies"] as List<String>)
+            filter()
+        }
