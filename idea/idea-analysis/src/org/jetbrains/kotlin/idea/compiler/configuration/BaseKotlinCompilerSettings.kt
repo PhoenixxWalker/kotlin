@@ -36,15 +36,15 @@ abstract class BaseKotlinCompilerSettings<T : Freezable> protected constructor(p
 
     var settings: T
         get() = _settings
-        private set(value) {
+        set(value) {
             validateNewSettings(value)
             _settings = value
+            project.messageBus.syncPublisher(KotlinCompilerSettingsListener.TOPIC).settingsChanged(value)
         }
 
     fun update(changer: T.() -> Unit) {
         @Suppress("UNCHECKED_CAST")
         settings = (settings.unfrozen() as T).apply { changer() }
-        project.messageBus.syncPublisher(KotlinCompilerSettingsListener.TOPIC).settingsChanged(settings)
     }
 
     protected fun validateInheritedFieldsUnchanged(settings: T) {
