@@ -33,7 +33,7 @@ import static org.jetbrains.kotlin.codegen.binding.CodegenBinding.*;
 import static org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isLocalFunction;
 
 public interface LocalLookup {
-    boolean lookupLocal(DeclarationDescriptor descriptor);
+    boolean isLocal(DeclarationDescriptor descriptor);
 
     enum LocalLookupCase {
         VAR {
@@ -52,7 +52,7 @@ public interface LocalLookup {
             ) {
                 VariableDescriptor vd = (VariableDescriptor) d;
 
-                boolean idx = localLookup != null && localLookup.lookupLocal(vd);
+                boolean idx = localLookup != null && localLookup.isLocal(vd);
                 if (!idx) return null;
 
                 KotlinType delegateType =
@@ -100,7 +100,7 @@ public interface LocalLookup {
             ) {
                 FunctionDescriptor vd = (FunctionDescriptor) d;
 
-                boolean idx = localLookup != null && localLookup.lookupLocal(vd);
+                boolean idx = localLookup != null && localLookup.isLocal(vd);
                 if (!idx) return null;
 
                 BindingContext bindingContext = state.getBindingContext();
