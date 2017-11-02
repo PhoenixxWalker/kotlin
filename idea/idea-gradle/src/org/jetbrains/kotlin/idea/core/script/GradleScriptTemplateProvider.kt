@@ -17,8 +17,6 @@
 package org.jetbrains.kotlin.idea.core.script
 
 import com.intellij.execution.configurations.CommandLineTokenizer
-import com.intellij.openapi.components.service
-import com.intellij.openapi.extensions.Extensions
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskNotificationListenerAdapter
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskType
@@ -26,6 +24,7 @@ import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import org.gradle.tooling.ProjectConnection
+import org.jetbrains.kotlin.idea.framework.GRADLE_SYSTEM_ID
 import org.jetbrains.kotlin.lexer.KotlinLexer
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
@@ -118,6 +117,7 @@ class GradleScriptDefinitionsContributor(private val project: Project): ScriptDe
         doLoadGradleTemplates(templateClass, dependencySelector, additionalResolverClasspath)
     }
     catch (t: Throwable) {
+        // TODO: review exception handling
         emptyList()
     }
 
@@ -178,8 +178,7 @@ class GradleScriptDefinitionsContributor(private val project: Project): ScriptDe
     }
 
     private fun reload() {
-        val scriptDefinitionsManager = project.service<ScriptDefinitionsManager>()
-        scriptDefinitionsManager.reloadDefinitionsBy(this)
+        ScriptDefinitionsManager.getInstance(project).reloadDefinitionsBy(this)
     }
 
 }
@@ -187,10 +186,9 @@ class GradleScriptDefinitionsContributor(private val project: Project): ScriptDe
 class ReloadGradleTemplatesOnSync : ExternalSystemTaskNotificationListenerAdapter() {
 
     override fun onEnd(id: ExternalSystemTaskId) {
-        if (id.type == ExternalSystemTaskType.RESOLVE_PROJECT) {
+        if (id.type == ExternalSystemTaskType.RESOLVE_PROJECT && id.projectSystemId == GRADLE_SYSTEM_ID) {
             val project = id.findProject() ?: return
-            val gradleDefinitionsContributor = Extensions.getArea(project).getExtensionPoint(ScriptDefinitionContributor.EP_NAME).extensions
-                    .filterIsInstance<GradleScriptDefinitionsContributor>().singleOrNull()
+            val gradleDefinitionsContributor = ScriptDefinitionContributor.find<GradleScriptDefinitionsContributor>(project)
             gradleDefinitionsContributor?.reloadIfNeccessary()
         }
     }
@@ -254,7 +252,7 @@ class GradleScriptDefaultDependenciesProvider(
         private val scriptDependenciesCache: ScriptDependenciesCache
 ) : DefaultScriptDependenciesProvider {
     override fun defaultDependenciesFor(scriptFile: VirtualFile): ScriptDependencies? {
-        if (scriptFile.name != KOTLIN_BUILD_FILE_SUFFIX) return null
+        if (!scriptFile.name.endsWith(KOTLIN_BUILD_FILE_SUFFIX)) return null
 
         return previouslyAnalyzedScriptsCombinedDependencies().takeUnless { it.classpath.isEmpty() }
     }
