@@ -289,7 +289,11 @@ public abstract class CodegenContext<T extends DeclarationDescriptor> {
 
     @NotNull
     public ClassContext intoAnonymousClass(@NotNull ClassDescriptor descriptor, @NotNull ExpressionCodegen codegen, @NotNull OwnerKind ownerKind) {
-        return new AnonymousClassContext(codegen.getState().getTypeMapper(), descriptor, ownerKind, this, codegen);
+        return intoAnonymousClass(descriptor, codegen.getState().getTypeMapper(), codegen, ownerKind);
+    }
+
+    public ClassContext intoAnonymousClass(@NotNull ClassDescriptor descriptor, @NotNull KotlinTypeMapper typeMapper, @NotNull LocalLookup enclosingLocalLookup, @NotNull OwnerKind ownerKind) {
+        return new AnonymousClassContext(typeMapper, descriptor, ownerKind, this, enclosingLocalLookup);
     }
 
     @NotNull
@@ -372,6 +376,17 @@ public abstract class CodegenContext<T extends DeclarationDescriptor> {
             cur = cur.getParentContext();
         }
         return null;
+    }
+
+    @Nullable
+    public CodegenContext getEnclosingThisContext() {
+        CodegenContext cur = getParentContext();
+        while (cur != null && cur.isContextWithUninitializedThis()) {
+            CodegenContext parent = cur.getParentContext();
+            assert parent != null : "Context " + cur + " should have a parent";
+            cur = parent.getParentContext();
+        }
+        return cur;
     }
 
     @Nullable
@@ -541,8 +556,10 @@ public abstract class CodegenContext<T extends DeclarationDescriptor> {
         StackValue resultValue;
         if (myOuter != null && getEnclosingClass() == d) {
             resultValue = result;
-        } else {
-            resultValue = parentContext != null ? parentContext.lookupInContext(d, result, state, ignoreNoOuter) : null;
+        }
+        else {
+            CodegenContext enclosingClassContext = getEnclosingThisContext();
+            resultValue = enclosingClassContext != null ? enclosingClassContext.lookupInContext(d, result, state, ignoreNoOuter) : null;
         }
 
         if (myOuter != null && resultValue != null && !isStaticField(resultValue)) {
@@ -708,5 +725,10 @@ public abstract class CodegenContext<T extends DeclarationDescriptor> {
     @NotNull
     public CodegenContext getFirstCrossInlineOrNonInlineContext() {
         return this;
+    }
+
+    @Nullable
+    public LocalLookup getEnclosingLocalLookup() {
+        return enclosingLocalLookup;
     }
 }
