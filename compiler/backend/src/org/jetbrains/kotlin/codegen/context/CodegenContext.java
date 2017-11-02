@@ -358,20 +358,11 @@ public abstract class CodegenContext<T extends DeclarationDescriptor> {
 
     @Nullable
     public CodegenContext getEnclosingClassContext() {
-        CodegenContext cur = getParentContext();
+        CodegenContext cur = getEnclosingThisContext();
         while (cur != null) {
-            if (cur.isContextWithUninitializedThis()) {
-                // If the current context is a constructor with uninitialized 'this',
-                // skip it and the corresponding class context
-                CodegenContext parent = cur.getParentContext();
-                assert parent != null : "Context " + cur + " should have a parent";
-                cur = parent;
-            }
-            else {
-                DeclarationDescriptor curDescriptor = cur.getContextDescriptor();
-                if (curDescriptor instanceof ClassDescriptor) {
-                    return cur;
-                }
+            DeclarationDescriptor curDescriptor = cur.getContextDescriptor();
+            if (curDescriptor instanceof ClassDescriptor) {
+                return cur;
             }
             cur = cur.getParentContext();
         }
